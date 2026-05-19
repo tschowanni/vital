@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1e2128">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VITAL">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="description" content="VITAL · Integriertes Gesundheits-Monitoring für POTS / ME/CFS">
+
+  <title>VITAL · Gesundheits-Monitor</title>
+
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ===== TOP-BAR ===== -->
+  <div class="topbar no-print">
+    <div class="app-name"><div class="logo-dot"></div>VITAL</div>
+    <button id="bt-pill" class="bt-pill disconnected" type="button">
+      <span class="dot"></span><span id="bt-text">Nicht verbunden</span>
+    </button>
+  </div>
+
+  <!-- ===== SCREEN · DASHBOARD ===== -->
+  <section class="screen active" id="screen-dashboard">
+    <div class="dashboard-date">
+      <div><span id="dashboard-day" class="day-name">Dienstag</span></div>
+      <div class="today-num"><span id="dashboard-num">19</span></div>
+      <div class="today-word" id="dashboard-word">19. Mai 2026</div>
+    </div>
+
+    <div id="bt-warning" class="alert warning" style="display:none;font-size:11px;padding:8px;">
+      <strong style="font-size:11px;">Bluetooth nicht verfügbar</strong>
+      Chrome/Edge auf Android oder Desktop nötig
+    </div>
+
+    <div class="tile-grid">
+      <div class="tile" id="tile-morning">
+        <div class="tile-head">
+          <div class="tile-name">Morgen-Routine</div>
+          <div class="tile-status idle" id="tile-morning-status">—</div>
+        </div>
+        <div class="tile-value tile-value-small" id="tile-morning-value">—</div>
+        <div class="tile-info" id="tile-morning-info">Noch nicht erfasst</div>
+      </div>
+
+      <div class="tile" id="tile-evening">
+        <div class="tile-head">
+          <div class="tile-name">Abend-BD</div>
+          <div class="tile-status idle" id="tile-evening-status">—</div>
+        </div>
+        <div class="tile-value tile-value-small" id="tile-evening-value">—</div>
+        <div class="tile-info" id="tile-evening-info">Noch nicht erfasst</div>
+      </div>
+
+      <div class="tile" id="tile-diary">
+        <div class="tile-head">
+          <div class="tile-name">Tagebuch</div>
+          <div class="tile-status idle" id="tile-diary-status">—</div>
+        </div>
+        <div class="tile-value" id="tile-diary-value">—</div>
+        <div class="tile-info" id="tile-diary-info">Noch nicht erfasst</div>
+      </div>
+
+      <div class="tile" id="tile-tilt">
+        <div class="tile-head">
+          <div class="tile-name">POTS-Test</div>
+          <div class="tile-status idle" id="tile-tilt-status">—</div>
+        </div>
+        <div class="tile-value tile-value-small" id="tile-tilt-value">—</div>
+        <div class="tile-info" id="tile-tilt-info">Noch nicht getestet</div>
+      </div>
+    </div>
+
+    <div class="trend-card">
+      <div class="trend-head">
+        <div class="trend-title">30-Tage-Trend</div>
+        <div class="trend-meta" id="trend-meta">—</div>
+      </div>
+      <svg id="trend-svg" class="trend-svg" viewBox="0 0 320 50" preserveAspectRatio="none"></svg>
+      <div style="display:flex;justify-content:center;gap:14px;margin-top:6px;font-size:10px;">
+        <span style="color:var(--danger);">● Schwindel</span>
+        <span style="color:var(--success);">● Wohlfühl</span>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button id="btn-stats" class="btn-ghost" type="button">Statistik</button>
+      <button id="btn-report" class="btn-ghost" type="button">Arzt-Bericht</button>
+    </div>
+  </section>
+
+  <!-- ===== SCREEN · TILT-LYING ===== -->
+  <section class="screen" id="screen-tilt-lying">
+    <div class="card accent">
+      <span class="tag accent">POTS-Test · Phase 1/2</span>
+      <div class="phase-action" id="tilt-lying-instruction">Ruhig liegen, normal atmen</div>
+    </div>
+    <div class="card">
+      <div class="hr-meta">Aktueller Puls</div>
+      <div class="hr-display"><span class="hr-num no-signal" id="tilt-lying-hr">--</span><span class="hr-lbl">bpm</span></div>
+      <div class="timer-block">
+        <div class="timer-val" id="tilt-lying-timer">10:00</div>
+        <div class="timer-cap">verbleibend · Liegen</div>
+      </div>
+      <div class="progress"><div class="progress-fill" id="tilt-lying-progress" style="width:0%;"></div></div>
+    </div>
+    <div class="card" id="tilt-baseline-card" style="display:none;">
+      <div class="row"><span class="k">Baseline-Erfassung</span><span class="v" id="tilt-baseline-current">-- bpm</span></div>
+    </div>
+    <button id="tilt-btn-abort-lying" class="btn-ghost danger" type="button">Test abbrechen</button>
+  </section>
+
+  <!-- ===== SCREEN · TILT-STANDUP ===== -->
+  <section class="screen" id="screen-tilt-standup">
+    <div class="card standing">
+      <span class="tag standing">Jetzt aufstehen</span>
+      <div class="phase-action">Stelle dich langsam hin. Tippe sobald du stehst.</div>
+    </div>
+    <div class="card">
+      <div class="stand-countdown">
+        <div class="lbl">Baseline (Liegend)</div>
+        <div class="big" id="tilt-standup-baseline">--</div>
+        <div class="hint">bpm · Durchschnitt letzte 2 Min</div>
+      </div>
+    </div>
+    <button id="tilt-btn-standing-start" class="btn btn-big" type="button">Ich stehe jetzt</button>
+    <button id="tilt-btn-abort-standup" class="btn-ghost danger" type="button">Test abbrechen</button>
+  </section>
+
+  <!-- ===== SCREEN · TILT-STANDING ===== -->
+  <section class="screen" id="screen-tilt-standing">
+    <div class="card standing">
+      <span class="tag standing">POTS-Test · Phase 2/2</span>
+      <div class="phase-action">Ruhig stehen · nicht laufen, nicht setzen</div>
+    </div>
+    <div class="card">
+      <div class="hr-meta">Aktueller Puls</div>
+      <div class="hr-display"><span class="hr-num standing no-signal" id="tilt-standing-hr">--</span><span class="hr-lbl">bpm</span></div>
+      <div class="hr-meta" id="tilt-standing-delta">+-- gegenüber Liegend</div>
+      <div class="timer-block">
+        <div class="timer-val standing" id="tilt-standing-timer">10:00</div>
+        <div class="timer-cap" id="tilt-standing-timer-cap">verbleibend · Stehen</div>
+      </div>
+      <div class="progress"><div class="progress-fill standing" id="tilt-standing-progress" style="width:0%;"></div></div>
+    </div>
+    <div class="card">
+      <div class="divider">Messpunkte</div>
+      <div class="stage-list">
+        <div class="stage-item" data-measure="min1">
+          <div class="stage-num active">1</div><span class="stage-time">Nach 1 Min</span>
+          <span class="stage-val pending">—</span>
+        </div>
+        <div class="stage-item" data-measure="min3">
+          <div class="stage-num">3</div><span class="stage-time">Nach 3 Min</span>
+          <span class="stage-val pending">—</span>
+        </div>
+        <div class="stage-item" data-measure="min5">
+          <div class="stage-num">5</div><span class="stage-time">Nach 5 Min</span>
+          <span class="stage-val pending">—</span>
+        </div>
+        <div class="stage-item" data-measure="min10">
+          <div class="stage-num">10</div><span class="stage-time">Nach 10 Min</span>
+          <span class="stage-val pending">—</span>
+        </div>
+      </div>
+    </div>
+    <button id="tilt-btn-abort-standing" class="btn-ghost danger" type="button">Test abbrechen</button>
+  </section>
+
+  <!-- ===== SCREEN · TILT-RESULT ===== -->
+  <section class="screen" id="screen-tilt-result">
+    <div class="screen-header">
+      <button class="back-btn" type="button">←</button>
+      <div class="header-text">
+        <h1>POTS-Auswertung</h1>
+        <div class="subtitle" id="tilt-result-meta">—</div>
+      </div>
+    </div>
+    <div class="card result-card" id="tilt-result-card">
+      <div class="res-status" id="tilt-result-status">—</div>
+      <div class="res-delta" id="tilt-result-delta">--</div>
+      <div class="res-delta-lbl">bpm · Delta Stehen − Liegend</div>
+      <div class="res-summary">
+        <div class="res-cell"><div class="lbl">Liegend (Ø)</div><div class="val" id="tilt-result-baseline">--</div></div>
+        <div class="res-cell"><div class="lbl">Stehend max</div><div class="val" id="tilt-result-max">--</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="divider">Detail · Messpunkte</div>
+      <div class="stage-list">
+        <div class="stage-item"><span class="stage-time" style="width:110px;">Liegend (Ø)</span><span class="stage-val" id="tilt-result-row-baseline" style="margin-left:auto;">-- bpm</span></div>
+        <div class="stage-item"><span class="stage-time" style="width:110px;">Nach 1 Min</span><span class="stage-val" id="tilt-result-row-min1" style="margin-left:auto;">-- bpm</span></div>
+        <div class="stage-item"><span class="stage-time" style="width:110px;">Nach 3 Min</span><span class="stage-val" id="tilt-result-row-min3" style="margin-left:auto;">-- bpm</span></div>
+        <div class="stage-item"><span class="stage-time" style="width:110px;">Nach 5 Min</span><span class="stage-val" id="tilt-result-row-min5" style="margin-left:auto;">-- bpm</span></div>
+        <div class="stage-item"><span class="stage-time" style="width:110px;">Nach 10 Min</span><span class="stage-val" id="tilt-result-row-min10" style="margin-left:auto;">-- bpm</span></div>
+      </div>
+    </div>
+    <button id="tilt-btn-done" class="btn" type="button">Fertig</button>
+  </section>
+
+  <!-- ===== SCREEN · MORGEN BD-EINGABE ===== -->
+  <section class="screen" id="screen-morning-bp">
+    <div class="screen-header">
+      <button class="back-btn" type="button">←</button>
+      <div class="header-text"><h1>Morgen-Routine</h1><div class="subtitle">Schritt 1: Blutdruck liegend</div></div>
+    </div>
+    <div class="card accent">
+      <span class="tag accent">Schritt 1 von 3</span>
+      <div class="phase-action">Blutdruck im Liegen messen und Werte eintragen</div>
+    </div>
+    <div class="card">
+      <div class="field-row">
+        <div class="field"><label class="field-label">Systolisch (SYS)</label><input class="field-input" id="morning-bp-sys" type="number" inputmode="numeric" placeholder="120"></div>
+        <div class="field"><label class="field-label">Diastolisch (DIA)</label><input class="field-input" id="morning-bp-dia" type="number" inputmode="numeric" placeholder="80"></div>
+      </div>
+      <div class="field"><label class="field-label">Puls (vom BD-Gerät, optional)</label><input class="field-input" id="morning-bp-hr" type="number" inputmode="numeric" placeholder="65"></div>
+    </div>
+    <button id="morning-bp-submit" class="btn" type="button">Weiter</button>
+  </section>
+
+  <!-- ===== SCREEN · MORGEN AUSWAHL ===== -->
+  <section class="screen" id="screen-morning-choice">
+    <div class="screen-header">
+      <button class="back-btn" type="button">←</button>
+      <div class="header-text"><h1>Morgen-Routine</h1><div class="subtitle">Schritt 2: HRV-Messung?</div></div>
+    </div>
+    <div class="card success">
+      <span class="tag success">BD erfasst ✓</span>
+      <div class="phase-action">Blutdruck wurde gespeichert.</div>
+    </div>
+    <div class="card">
+      <div class="divider">Optional</div>
+      <p style="color:var(--txt-muted);font-size:13px;margin-bottom:8px;">Möchtest du jetzt zusätzlich eine 5-Min-HRV-Messung mit dem Polar H10 durchführen?</p>
+    </div>
+    <button id="morning-choice-hrv" class="btn" type="button">5 Min HRV messen</button>
+    <button id="morning-choice-ortho-1" class="btn-ghost" type="button">Direkt Orthostat-BD-Test</button>
+    <button id="morning-choice-finish-1" class="btn-ghost" type="button">Fertig — nur BD speichern</button>
+  </section>
+
+  <!-- ===== SCREEN · MORGEN HRV ===== -->
+  <section class="screen" id="screen-morning-hrv">
+    <div class="card accent">
+      <span class="tag accent">HRV-Messung läuft</span>
+      <div class="phase-action">Ruhig liegen, normal atmen</div>
+    </div>
+    <div class="card">
+      <div class="hr-meta">Aktueller Puls</div>
+      <div class="hr-display"><span class="hr-num no-signal" id="morning-hrv-hr">--</span><span class="hr-lbl">bpm</span></div>
+      <div class="timer-block">
+        <div class="timer-val" id="morning-hrv-timer">05:00</div>
+        <div class="timer-cap">verbleibend</div>
+      </div>
+      <div class="progress"><div class="progress-fill" id="morning-hrv-progress" style="width:0%;"></div></div>
+    </div>
+    <div class="card">
+      <div class="divider">Live-HRV</div>
+      <div class="row"><span class="k">RMSSD</span><span class="v"><span id="morning-hrv-rmssd">--</span> ms</span></div>
+      <div class="row"><span class="k">SDNN</span><span class="v"><span id="morning-hrv-sdnn">--</span> ms</span></div>
+    </div>
+    <button id="morning-hrv-abort" class="btn-ghost danger" type="button">Abbrechen</button>
+  </section>
+
+  <!-- ===== SCREEN · MORGEN ORTHO-CHOICE ===== -->
+  <section class="screen" id="screen-morning-orthochoice">
+    <div class="screen-header">
+      <button class="back-btn" type="button">←</button>
+      <div class="header-text"><h1>Morgen-Routine</h1><div class="subtitle">Schritt 3: Orthostat-Test?</div></div>
+    </div>
+    <div class="card success">
+      <span class="tag success">HRV erfasst ✓</span>
+      <div class="phase-action">HRV-Messung gespeichert.</div>
+    </div>
+    <div class="card">
+      <div class="divider">Orthostatischer BD-Test</div>
+      <p style="color:var(--txt-muted);font-size:13px;margin-bottom:8px;">Aufstehen und BD nach 1, 3 und 5 Min stehend messen. Zeigt orthostatische Hypotonie (BD-Abfall im Stehen).</p>
+    </div>
+    <button id="morning-choice-ortho-2" class="btn" type="button">Orthostat-Test starten</button>
+    <button id="morning-choice-finish-2" class="btn-ghost" type="button">Überspringen — Fertig</button>
+  </section>
+
+  <!-- ===== SCREEN · MORGEN ORTHO ===== -->
+  <section class="screen" id="screen-morning-ortho">
+    <div class="card standing">
+      <span class="tag standing">Orthostat-Test</span>
+      <div class="phase-action">Ruhig stehen · BD-Manschette bereit halten</div>
+    </div>
+    <div class="card">
+      <div class="timer-block">
+        <div class="timer-cap" id="morning-ortho-cap">Nächste Messung in</div>
+        <div class="timer-val standing" id="morning-ortho-timer">01:00</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="divider">Messpunkte</div>
+      <div class="stage-list">
+        <div class="stage-item ortho-row" data-key="min1">
+          <div class="stage-num">1</div><span class="stage-time">Nach 1 Min</span>
+          <span class="stage-val pending">—</span>
+        </div>
+        <div class="stage-item ortho-row" data-key="min3">
+          <div class="stage-num">3</div><span class="stage-time">Nach 3 Min</span>
+          <span class="stage-val pending">—</span>
+        </div>
+        <div class="stage-item ortho-row" data-key="min5">
+          <div class="stage-num">5</div><span class="stage-time">Nach 5 Min</span>
+          <span class="stage-val pending">—</span>
+        </div>
+      </div>
+    </div>
+    <button id="morning-ortho-skip" class="btn-ghost" type="button">Test beenden</button>
+    <button id="morning-ortho-abort" class="btn-ghost danger" type="button">Abbrechen</button>
+  </section>
+
+  <!-- ===== SCREEN · MORGEN RESULT ===== -->
+  <section class="screen" id="screen-morning-result">
+    <div class="screen-header">
+      <button class="back-btn" type="button">←</button>
+      <div class="header-text"><h1>Morgen-Routine ✓</h1><div class="subtitle" id="morning-result-meta">—</div></div>
+    </div>
+    <div class="card success">
+      <span class="tag success">Erfasst</span>
+      <div class="phase-action">Werte gespeichert.</div>
+    </div>
+    <div class="card">
+      <div class="divider">Blutdruck liegend</div>
+      <div class="row"><span class="k">BD</span><span class="v" id="morning-result-bp">--/--</span></div>
+      <div class="row"><span class="k">Puls (BD-Gerät)</span><span class="v" id="morning-result-hr">--</span></div>
+    </div>
+    <div class="card">
+      <div class="divider">HRV</div>
+      <div class="row"><span class="k">RMSSD</span><span class="v"><span id="morning-result-rmssd">--</span> ms</span></div>
+      <div class="row"><span class="k">SDNN</span><span class="v"><span id="morning-result-sdnn">--</span> ms</span></div>
+    </div>
+    <div class="card" id="morning-result-ortho" style="display:none;">
+      <div class="divider">Orthostat-Test</div>
+      <div class="row"><span class="k">1 Min</span><span class="v" id="morning-result-min1">—</span></div>
+      <div class="row"><span class="k">3 Min</span><span class="v" id="morning-result-min3">—</span></div>
+      <div class="row"><span class="k">5 Min</span><span class="v" id="morning-result-min5">—</span></div>
+    </div>
+    <button id="morning-done" class="btn" type="button">Fertig</button>
+  </section>
+
+  <!-- ===== SCREEN · ABEND-BD ===== -->
+  <section class="screen" id="screen-evening">
+    <div class="screen-header">
+      <button class="back-btn" type="button">←</button>
+      <div class="header-text"><h1>Abend-BD</h1><div class="subtitle">Blutdruck-Messung abends</div></div>
+    </div>
+    <div class="card accent">
+      <div class="phase-action">Werte vom BD-Gerät eintragen</div>
+    </div>
+    <div class="card">
+      <div class="field-row">
+        <div class="field"><label class="field-label">SYS</label><input class="field-input" id="evening-sys" type="number" inputmode="numeric" placeholder="120"></div>
+        <div class="field"><label class="field-label">DIA</label><input class="field-input" id="evening-dia" type="number" inputmode="numeric" placeholder="80"></div>
+      </div>
+      <div class="field"><label class="field-label">Puls (optional)</label><input class="field-input" id="evening-hr" type="number" inputmode="numeric" placeholder="65"></div>
+    </div>
+    <button id="evening-submit" class="btn" type="button">Speichern</button>
+  </section>
+
+  <!-- ===== SCREEN · TAGEBUCH ===== -->
+  <section class="screen" id="screen-diary">
+    <div class="screen-header">
+      <button class="back-btn" type="button">←</button>
+      <div class="header-text"><h1>Tagebuch</h1><div class="subtitle">Heutiger Eintrag</div></div>
+    </div>
+
+    <div class="card">
+      <div class="field-label" style="margin-bottom:4px;">Schwindel (0 = keiner, 10 = stärkster)</div>
+      <div class="slider-row">
+        <input type="range" min="0" max="10" value="5" class="slider" id="diary-dizziness">
+        <div class="slider-val" id="diary-dizziness-val">5</div>
+      </div>
+
+      <div class="field-label" style="margin-bottom:4px;">Wohlfühligkeit (0 = miserabel, 10 = perfekt)</div>
+      <div class="slider-row">
+        <input type="range" min="0" max="10" value="5" class="slider" id="diary-wellbeing">
+        <div class="slider-val" id="diary-wellbeing-val">5</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="divider">Heutige Trigger</div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Hitze-Exposition</div><div class="toggle-sub">Heisse Dusche, Wärme, Sauna</div></div>
+        <label class="toggle"><input type="checkbox" id="diary-heat"><span class="toggle-track"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Belastung / Aktivität</div><div class="toggle-sub">Über normalen Tagesablauf hinaus</div></div>
+        <label class="toggle"><input type="checkbox" id="diary-exertion"><span class="toggle-track"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Schlechter Schlaf</div><div class="toggle-sub">Letzte Nacht unruhig/zu kurz</div></div>
+        <label class="toggle"><input type="checkbox" id="diary-poor-sleep"><span class="toggle-track"></span></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="divider">Schlaf-Daten (von Garmin)</div>
+      <div class="field-row">
+        <div class="field"><label class="field-label">Schlafstunden</label><input class="field-input" id="diary-sleep-hours" type="number" step="0.5" inputmode="decimal" placeholder="7.5"></div>
+        <div class="field"><label class="field-label">SpO2 min %</label><input class="field-input" id="diary-spo2-min" type="number" inputmode="numeric" placeholder="92"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="divider">Notizen (optional)</div>
+      <textarea class="field-input textarea" id="diary-notes" placeholder="Besondere Beobachtungen, Symptome, Auslöser ..."></textarea>
+    </div>
+
+    <button id="diary-submit" class="btn" type="button">Eintrag speichern</button>
+  </section>
+
+  <!-- ===== SCREEN · STATISTIK ===== -->
+  <section class="screen" id="screen-stats">
+    <div class="screen-header">
+      <button class="back-btn" type="button">←</button>
+      <div class="header-text"><h1>Statistik</h1><div class="subtitle">Auswertung deiner Daten</div></div>
+    </div>
+
+    <div class="card" id="import-card">
+      <div class="divider">Daten-Import (alte Tagebuch-App)</div>
+      <p style="color:var(--txt-muted);font-size:12px;margin-bottom:10px;">
+        Importiert eine TXT-Datei im Format <code style="color:var(--accent-hi);">TT.MM.JJJJ*Schwindel&lt;Wohlfühl&gt;</code>
+      </p>
+      <input type="file" id="import-file" accept=".txt,text/plain" style="display:none;">
+      <button id="import-trigger" class="btn-ghost" type="button">TXT-Datei auswählen</button>
+    </div>
+
+    <div id="stats-content"></div>
+  </section>
+
+  <!-- ===== SCREEN · REPORT ===== -->
+  <section class="screen" id="screen-report">
+    <div class="screen-header no-print">
+      <button class="back-btn" type="button">←</button>
+      <div class="header-text"><h1>Arzt-Bericht</h1><div class="subtitle">Druckbar als PDF</div></div>
+    </div>
+    <div class="card no-print">
+      <div class="field-row">
+        <div class="field">
+          <label class="field-label">Zeitraum (Tage)</label>
+          <select class="field-input" id="report-days" onchange="UI.renderReport()">
+            <option value="30">Letzte 30 Tage</option>
+            <option value="90" selected>Letzte 90 Tage</option>
+            <option value="180">Letzte 180 Tage</option>
+            <option value="365">Letztes Jahr</option>
+            <option value="9999">Alle Daten</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div id="report-content"></div>
+    <div class="action-row no-print">
+      <button id="report-print" class="btn" type="button">Drucken / PDF</button>
+      <button id="report-export" class="btn-ghost" type="button">JSON-Export</button>
+    </div>
+  </section>
+
+  <div class="footer no-print">VITAL · v2.0 · Lokal · GitHub Pages</div>
+</div>
+
+<div id="modal-backdrop" class="modal-backdrop">
+  <div class="modal" id="modal-content">
+    <div class="modal-handle"></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script src="core.js"></script>
+<script src="tests.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
