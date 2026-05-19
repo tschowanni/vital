@@ -29,9 +29,14 @@
   <!-- ===== TOP-BAR ===== -->
   <div class="topbar no-print">
     <div class="app-name"><div class="logo-dot"></div>VITAL</div>
-    <button id="bt-pill" class="bt-pill disconnected" type="button">
-      <span class="dot"></span><span id="bt-text">Nicht verbunden</span>
-    </button>
+    <div class="bt-pills">
+      <button id="bt-pill" class="bt-pill disconnected" type="button" title="Polar H10 Brustgurt">
+        <span class="dot"></span><span id="bt-text">H10</span>
+      </button>
+      <button id="bp-pill" class="bt-pill disconnected" type="button" title="Beurer BM64 Blutdruckmessgerät">
+        <span class="dot"></span><span id="bp-text">BM64</span>
+      </button>
+    </div>
   </div>
 
   <!-- ===== SCREEN · DASHBOARD ===== -->
@@ -220,7 +225,10 @@
     </div>
     <div class="card accent">
       <span class="tag accent">Schritt 1 von 3</span>
-      <div class="phase-action">Blutdruck im Liegen messen und Werte eintragen</div>
+      <div class="phase-action">Blutdruck im Liegen messen</div>
+    </div>
+    <div class="alert info" style="margin-bottom:10px;">
+      <strong>Tipp:</strong> Bei verbundenem BM64 (siehe Topbar) werden die Werte beim Messen automatisch übernommen. Manuelle Eingabe nur als Fallback.
     </div>
     <div class="card">
       <div class="field-row">
@@ -296,7 +304,10 @@
   <section class="screen" id="screen-morning-ortho">
     <div class="card standing">
       <span class="tag standing">Orthostat-Test</span>
-      <div class="phase-action">Ruhig stehen · BD-Manschette bereit halten</div>
+      <div class="phase-action">Ruhig stehen · bei Aufforderung am BM64 messen</div>
+    </div>
+    <div class="alert info" style="margin-bottom:10px;font-size:11px;">
+      Bei verbundenem BM64 wird der Wert beim Messen automatisch übernommen.
     </div>
     <div class="card">
       <div class="timer-block">
@@ -362,6 +373,9 @@
     </div>
     <div class="card accent">
       <div class="phase-action">Werte vom BD-Gerät eintragen</div>
+    </div>
+    <div class="alert info" style="margin-bottom:10px;">
+      <strong>Tipp:</strong> Bei verbundenem BM64 läuft das Speichern automatisch, sobald du am Gerät misst — diese Eingabe ist nur ein Fallback.
     </div>
     <div class="card">
       <div class="field-row">

@@ -42,9 +42,17 @@ const CFG = Object.freeze({
     DIARY:   1,   // täglich
   },
 
-  // Bluetooth
+  // Bluetooth · Polar H10 (Heart Rate Service)
   HR_SERVICE_UUID:   'heart_rate',
   HR_CHARACTERISTIC: 'heart_rate_measurement',
+
+  // Bluetooth · Beurer BM64 (Standard Blood Pressure Service · IEEE 11073)
+  BP_SERVICE_UUID:           'blood_pressure',           // 0x1810
+  BP_MEASUREMENT_CHAR:       'blood_pressure_measurement', // 0x2A35 (Indication)
+  BP_FEATURE_CHAR:           'blood_pressure_feature',     // 0x2A49 (Read)
+  BP_INTERMEDIATE_CUFF_CHAR: 'intermediate_cuff_pressure', // 0x2A36 (Notify, ignorieren)
+  BP_AUTO_SAVE_TARGET:       'morning', // 'morning' | 'evening' | 'auto' — wohin ankommende Messungen gespeichert werden
+  BP_AUTO_DECISION_HOUR:     14,        // < 14:00 → morning, sonst → evening (bei 'auto')
 
   // Voice
   PREFERRED_LANGS: ['de-CH', 'de-DE', 'de-AT', 'de'],
@@ -57,11 +65,19 @@ const State = {
   currentScreen: 'dashboard',
   screenStack:   [],       // für Back-Navigation
 
-  // Bluetooth
+  // Bluetooth · Polar H10
   device: null,
   server: null,
   characteristic: null,
   btStatus: 'disconnected',
+
+  // Bluetooth · Beurer BM64 (separate Verbindung)
+  bpDevice: null,
+  bpServer: null,
+  bpCharacteristic: null,
+  bpStatus: 'disconnected',
+  bpLastMeasurement: null,    // letzte empfangene Messung (für UI-Anzeige)
+  bpAutoSaveMode: true,        // ankommende Messungen direkt speichern?
 
   // Live-HR
   currentHR: null,
@@ -88,7 +104,7 @@ const Utils = {
   },
   fmtDate(d) {
     const dt = (d instanceof Date) ? d : new Date(d);
-    return `${dt.getFullYear()}.${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}`;
+    return `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
   },
   fmtTime(d) {
     const dt = (d instanceof Date) ? d : new Date(d);
@@ -316,6 +332,171 @@ const BT = {
       if (State.characteristic) await State.characteristic.stopNotifications().catch(() => {});
       if (State.server && State.server.connected) State.server.disconnect();
     } catch (err) { Utils.log('Disconnect-Fehler:', err); }
+  },
+
+  /* ============================================================================
+     BLUTDRUCKMESSGERÄT (Beurer BM64) · BLE Standard Blood Pressure Profile
+     UUID 0x1810 · Characteristic 0x2A35 (Blood Pressure Measurement, Indication)
+     ============================================================================ */
+
+  /** IEEE 11073 SFLOAT (16-bit) Decoder.
+   *  Aufbau: 4 Bit Exponent (signed) | 12 Bit Mantissa (signed)
+   *  Spezialwerte werden zu NaN/null aufgelöst.
+   */
+  parseSFLOAT(view, offset) {
+    const raw = view.getUint16(offset, true);
+    // Spezialwerte (IEEE 11073)
+    if (raw === 0x07FF) return NaN;        // NaN
+    if (raw === 0x0800) return null;       // NRes (Not at this Resolution)
+    if (raw === 0x07FE) return Infinity;   // +Inf
+    if (raw === 0x0802) return -Infinity;  // -Inf
+    if (raw === 0x0801) return null;       // Reserved
+    // 12-Bit Mantissa (Sign-Extend)
+    let mantissa = raw & 0x0FFF;
+    if (mantissa & 0x0800) mantissa -= 0x1000;
+    // 4-Bit Exponent (Sign-Extend)
+    let exponent = (raw >> 12) & 0x000F;
+    if (exponent & 0x0008) exponent -= 0x0010;
+    return mantissa * Math.pow(10, exponent);
+  },
+
+  /** Blood Pressure Measurement Characteristic (0x2A35) decodieren.
+   *  Format (BLE Spec):
+   *    Byte 0:    Flags
+   *    Byte 1-2:  Systolic (SFLOAT)
+   *    Byte 3-4:  Diastolic (SFLOAT)
+   *    Byte 5-6:  Mean Arterial Pressure (SFLOAT)
+   *    [Byte 7-13]: Time Stamp (wenn Flags Bit 1 gesetzt) — 7 Bytes
+   *    [Byte +2]:   Pulse Rate (SFLOAT) (wenn Flags Bit 2 gesetzt)
+   *    [Byte +1]:   User ID (wenn Flags Bit 3 gesetzt)
+   *    [Byte +2]:   Measurement Status (wenn Flags Bit 4 gesetzt)
+   */
+  parseBPMeasurement(dataView) {
+    if (!dataView || dataView.byteLength < 7) {
+      Utils.log('BP: zu kurz', dataView?.byteLength);
+      return null;
+    }
+    const flags = dataView.getUint8(0);
+    const isKPa = (flags & 0x01) === 1;     // 0 = mmHg, 1 = kPa
+    const hasTimestamp     = (flags >> 1) & 0x01;
+    const hasPulseRate     = (flags >> 2) & 0x01;
+    const hasUserID        = (flags >> 3) & 0x01;
+    const hasMeasureStatus = (flags >> 4) & 0x01;
+
+    let sys = BT.parseSFLOAT(dataView, 1);
+    let dia = BT.parseSFLOAT(dataView, 3);
+    let map = BT.parseSFLOAT(dataView, 5);    // Mean Arterial Pressure
+    if (isKPa) { sys *= 7.50062; dia *= 7.50062; map *= 7.50062; }  // → mmHg
+
+    let offset = 7;
+    let timestamp = null;
+    if (hasTimestamp && dataView.byteLength >= offset + 7) {
+      const year = dataView.getUint16(offset, true);
+      const month = dataView.getUint8(offset + 2);
+      const day   = dataView.getUint8(offset + 3);
+      const hour  = dataView.getUint8(offset + 4);
+      const min   = dataView.getUint8(offset + 5);
+      const sec   = dataView.getUint8(offset + 6);
+      if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        timestamp = new Date(year, month - 1, day, hour, min, sec).toISOString();
+      }
+      offset += 7;
+    }
+
+    let hr = null;
+    if (hasPulseRate && dataView.byteLength >= offset + 2) {
+      hr = BT.parseSFLOAT(dataView, offset);
+      offset += 2;
+    }
+
+    let userId = null;
+    if (hasUserID && dataView.byteLength >= offset + 1) {
+      userId = dataView.getUint8(offset);
+      offset += 1;
+    }
+
+    let status = null;
+    if (hasMeasureStatus && dataView.byteLength >= offset + 2) {
+      status = dataView.getUint16(offset, true);
+      offset += 2;
+    }
+
+    // Plausibilitäts-Prüfung
+    if (!Number.isFinite(sys) || !Number.isFinite(dia) || sys < 30 || sys > 280 || dia < 20 || dia > 200) {
+      Utils.log('BP: unplausible Werte', { sys, dia });
+      return null;
+    }
+
+    return {
+      sys:    Math.round(sys),
+      dia:    Math.round(dia),
+      map:    Number.isFinite(map) ? Math.round(map) : null,
+      hr:     Number.isFinite(hr) ? Math.round(hr) : null,
+      timestamp: timestamp || new Date().toISOString(),
+      userId,
+      status,
+      raw:    Array.from(new Uint8Array(dataView.buffer)).map(b => b.toString(16).padStart(2,'0')).join(' '),
+    };
+  },
+
+  async connectBP() {
+    if (!BT.isSupported()) throw new Error('Web Bluetooth nicht verfügbar. Bitte Chrome/Edge verwenden.');
+    Utils.log('BP-BT: Pairing ...');
+    UI.setBP('connecting', 'Suchen ...');
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [CFG.BP_SERVICE_UUID] }],
+        optionalServices: ['device_information', 'battery_service'],
+      });
+      State.bpDevice = device;
+      device.addEventListener('gattserverdisconnected', BT.onBPDisconnect);
+      State.bpServer = await device.gatt.connect();
+      const service = await State.bpServer.getPrimaryService(CFG.BP_SERVICE_UUID);
+      State.bpCharacteristic = await service.getCharacteristic(CFG.BP_MEASUREMENT_CHAR);
+      State.bpCharacteristic.addEventListener('characteristicvaluechanged', BT.onBPMeasurement);
+      // Indications (nicht Notifications) — startNotifications aktiviert intern beides
+      await State.bpCharacteristic.startNotifications();
+      State.bpStatus = 'connected';
+      UI.setBP('connected', device.name || 'BM64');
+      Utils.log('BP-BT: ✓', device.name);
+      return true;
+    } catch (err) {
+      Utils.log('BP-BT-Fehler:', err);
+      State.bpStatus = 'error';
+      UI.setBP('error', 'Fehler');
+      throw err;
+    }
+  },
+
+  onBPMeasurement(event) {
+    try {
+      const dataView = event.target.value;
+      const measurement = BT.parseBPMeasurement(dataView);
+      if (!measurement) return;
+      Utils.log('BP-Messung empfangen:', measurement);
+      State.bpLastMeasurement = measurement;
+      // Auto-Save in den richtigen Slot (morning/evening) basierend auf Uhrzeit
+      if (State.bpAutoSaveMode) {
+        BPReceiver.saveMeasurement(measurement);
+      }
+      // UI benachrichtigen — falls aktiver Screen darauf wartet
+      UI.onBPMeasurementReceived(measurement);
+    } catch (err) { Utils.log('BP-Parse-Fehler:', err); }
+  },
+
+  onBPDisconnect() {
+    Utils.log('BP-BT: getrennt');
+    State.bpStatus = 'disconnected';
+    State.bpCharacteristic = null;
+    State.bpServer = null;
+    UI.setBP('disconnected', 'Getrennt');
+  },
+
+  async disconnectBP() {
+    try {
+      if (State.bpCharacteristic) await State.bpCharacteristic.stopNotifications().catch(() => {});
+      if (State.bpServer && State.bpServer.connected) State.bpServer.disconnect();
+    } catch (err) { Utils.log('BP-Disconnect-Fehler:', err); }
   },
 };
 
