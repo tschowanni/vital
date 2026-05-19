@@ -77,13 +77,15 @@ body { display: flex; flex-direction: column; min-height: 100vh; min-height: 100
   width: 8px; height: 8px; background: var(--accent); border-radius: 50%;
   box-shadow: 0 0 8px var(--accent);
 }
+.bt-pills { display: flex; gap: 6px; }
 .bt-pill {
-  display: flex; align-items: center; gap: 6px;
-  background: var(--bg-card-hi); padding: 5px 10px; border-radius: 14px;
-  font-size: 11px; color: var(--success); font-weight: 600;
+  display: flex; align-items: center; gap: 5px;
+  background: var(--bg-card-hi); padding: 5px 9px; border-radius: 14px;
+  font-size: 10px; color: var(--success); font-weight: 700;
   cursor: pointer; border: 1px solid transparent;
   transition: border-color 0.15s;
   font-family: var(--font-sans);
+  letter-spacing: 0.5px;
 }
 .bt-pill:hover { border-color: var(--border-med); }
 .bt-pill.disconnected { color: var(--txt-muted); }

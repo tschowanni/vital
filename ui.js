@@ -8,6 +8,7 @@ const UI = {
   init() {
     // Top-Bar
     Utils.$('#bt-pill').addEventListener('click', UI.onBTClick);
+    Utils.$('#bp-pill').addEventListener('click', UI.onBPClick);
 
     // Dashboard-Tiles
     Utils.$('#tile-tilt').addEventListener('click', () => UI.startTiltTest());
@@ -71,6 +72,10 @@ const UI = {
       Utils.$('#bt-warning').style.display = 'block';
     }
 
+    // Initial-Status beider BT-Pillen
+    UI.setBT('disconnected', 'H10');
+    UI.setBP('disconnected', 'BM64');
+
     UI.renderDashboard();
   },
 
@@ -83,7 +88,76 @@ const UI = {
     if (name === 'dashboard') UI.renderDashboard();
   },
 
-  /* ----- BLUETOOTH -------------------------------------------------------- */
+  /* ----- BLUTDRUCKMESSGERÄT (Beurer BM64) -------------------------------- */
+  setBP(status, text) {
+    const pill = Utils.$('#bp-pill');
+    const tx = Utils.$('#bp-text');
+    pill.classList.remove('disconnected', 'connecting', 'connected', 'error');
+    pill.classList.add(status);
+    tx.textContent = text;
+  },
+
+  async onBPClick() {
+    if (State.bpStatus === 'connected') {
+      if (confirm('Verbindung zum Blutdruckmessgerät trennen?')) await BT.disconnectBP();
+      return;
+    }
+    try { await BT.connectBP(); }
+    catch (err) {
+      if (err && err.name === 'NotFoundError') return;   // User-Abbruch, keine Meldung nötig
+      alert('BD-Gerät-Fehler: ' + (err.message || err));
+    }
+  },
+
+  /** Wird aufgerufen, wenn eine Messung vom BM64 empfangen wurde — UI-Feedback */
+  onBPMeasurementReceived(measurement) {
+    Audio.beepDouble();
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+  },
+
+  /** Bei laufender Morgen-Routine: BD wurde automatisch befüllt */
+  onMorningBPAutoFilled(measurement) {
+    // Wenn wir gerade auf dem BD-Eingabe-Screen sind → weiterspringen
+    if (State.currentScreen === 'morning-bp') {
+      // Eingabe-Felder visuell befüllen (zur Bestätigung)
+      Utils.$('#morning-bp-sys').value = measurement.sys;
+      Utils.$('#morning-bp-dia').value = measurement.dia;
+      if (measurement.hr) Utils.$('#morning-bp-hr').value = measurement.hr;
+      // Kurz feedbacken, dann automatisch weiter
+      Speech.speak(`Blutdruck ${measurement.sys} zu ${measurement.dia} empfangen.`);
+      setTimeout(() => UI.showScreen('morning-choice'), 1200);
+    }
+  },
+
+  /** Bei Auto-Speicherung außerhalb eines aktiven Workflows */
+  onBPAutoSaved(slot, record) {
+    const txt = slot === 'morning' ? 'Morgen-BD' : 'Abend-BD';
+    Speech.speak(`${txt} gespeichert. ${record.sys || record.bpLying.sys} zu ${record.dia || record.bpLying.dia}.`);
+    // Toast/Hinweis anzeigen
+    UI.showToast(`✓ ${txt}: ${record.sys || record.bpLying.sys}/${record.dia || record.bpLying.dia}`);
+    if (State.currentScreen === 'dashboard') UI.renderDashboard();
+  },
+
+  /** Kurzer Toast unten am Bildschirm */
+  showToast(msg, duration = 3000) {
+    let toast = Utils.$('#vital-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'vital-toast';
+      toast.style.cssText = `position:fixed;bottom:max(20px,env(safe-area-inset-bottom));left:50%;
+        transform:translateX(-50%);background:var(--success);color:#1e2128;
+        padding:10px 18px;border-radius:24px;font-weight:700;font-size:13px;
+        box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:200;
+        opacity:0;transition:opacity 0.3s;pointer-events:none;`;
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    clearTimeout(UI._toastTimer);
+    UI._toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, duration);
+  },
+
+  /* ----- BLUETOOTH (Polar H10) ------------------------------------------ */
   setBT(status, text) {
     const pill = Utils.$('#bt-pill');
     const tx = Utils.$('#bt-text');
@@ -260,6 +334,11 @@ const UI = {
   },
 
   promptOrthoBP(key, label) {
+    // Bei verbundenem BM64: nicht prompten — die BLE-Daten kommen via BPReceiver
+    if (State.bpStatus === 'connected') {
+      UI.showToast(`${label} — bitte am BM64 messen`, 5000);
+      return;
+    }
     const sys = prompt(`${label} — Systolisch (SYS)?`);
     if (sys === null) return;
     const dia = prompt(`${label} — Diastolisch (DIA)?`);
@@ -812,3 +891,4 @@ window.TiltTest = TiltTest;
 window.MorningRoutine = MorningRoutine;
 window.EveningBP = EveningBP;
 window.Diary = Diary;
+window.BPReceiver = BPReceiver;

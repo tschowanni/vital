@@ -5,8 +5,102 @@
 'use strict';
 
 /* ============================================================================
-   TILT-TEST · POTS Active Stand Test
+   BPReceiver · empfängt Messungen vom Beurer BM64 und routet sie ans richtige Modul
    ============================================================================ */
+const BPReceiver = {
+
+  /** Entscheidet basierend auf Uhrzeit der Messung, in welchen Slot gespeichert wird:
+   *  - Vor 14:00 → Morgen-Routine
+   *  - Ab 14:00  → Abend-BD
+   *
+   *  Wenn aktuell eine Morgen-Routine läuft (State.activeTest.kind === 'morning'),
+   *  geht die Messung dort hinein (BD-liegend ODER Orthostat-Slot, je nach Phase).
+   */
+  saveMeasurement(measurement) {
+    const ts = new Date(measurement.timestamp);
+    const hour = ts.getHours();
+    Utils.log(`BPReceiver: Messung ${measurement.sys}/${measurement.dia} @ ${Utils.fmtTime(ts)}`);
+
+    // CASE 1 — Aktive Morgen-Routine läuft → in laufenden Workflow integrieren
+    if (State.activeTest && State.activeTest.kind === 'morning') {
+      BPReceiver.feedActiveMorning(measurement);
+      return;
+    }
+
+    // CASE 2 — Auto-Slot basierend auf Tageszeit
+    if (hour < CFG.BP_AUTO_DECISION_HOUR) {
+      BPReceiver.saveAsMorning(measurement);
+    } else {
+      BPReceiver.saveAsEvening(measurement);
+    }
+  },
+
+  /** Während einer aktiven Morgen-Routine: BD-Werte ins richtige Slot füllen */
+  feedActiveMorning(measurement) {
+    const a = State.activeTest;
+    // Phase 1 — BD liegend noch nicht erfasst
+    if (a.bpLying === null) {
+      a.bpLying = { sys: measurement.sys, dia: measurement.dia, hr: measurement.hr };
+      UI.onMorningBPAutoFilled(measurement);
+      return;
+    }
+    // Phase 3 — Orthostat-Test läuft, slot suchen
+    if (a.orthostatic) {
+      for (const key of ['min1', 'min3', 'min5']) {
+        if (a.orthostatic[key] === 'waiting') {
+          a.orthostatic[key] = { sys: measurement.sys, dia: measurement.dia, hr: measurement.hr };
+          UI.updateOrthoRow(key, measurement.sys, measurement.dia, measurement.hr);
+          // Wenn das die letzte Messung war → finalisieren
+          if (key === 'min5') {
+            setTimeout(() => MorningRoutine.finish(), 800);
+          }
+          return;
+        }
+      }
+    }
+    // Fallback: keine offene Phase — als zusätzlicher Eintrag speichern
+    BPReceiver.saveAsEvening(measurement);
+  },
+
+  /** Als Morgen-Routine speichern (nur BD, ohne HRV/Orthostat) */
+  saveAsMorning(measurement) {
+    // Prüfen ob heute schon eine Morgen-Routine erfasst wurde
+    const todays = Storage.today(CFG.STORE.MORNING);
+    if (todays.length > 0) {
+      // Heute schon ein Eintrag — neue Messung in den vorhandenen Eintrag mergen oder als Abend speichern
+      Utils.log('Morgen heute schon erfasst, speichere als Abend-BD');
+      BPReceiver.saveAsEvening(measurement);
+      return;
+    }
+    const record = {
+      kind: 'morning',
+      id: Utils.uid(),
+      ts: measurement.timestamp,
+      bpLying: { sys: measurement.sys, dia: measurement.dia, hr: measurement.hr },
+      hrv: null,
+      orthostatic: null,
+      _source: 'BM64',
+    };
+    Storage.add(CFG.STORE.MORNING, record);
+    UI.onBPAutoSaved('morning', record);
+  },
+
+  /** Als Abend-BD speichern */
+  saveAsEvening(measurement) {
+    const record = {
+      id: Utils.uid(),
+      ts: measurement.timestamp,
+      sys: measurement.sys,
+      dia: measurement.dia,
+      hr:  measurement.hr,
+      _source: 'BM64',
+    };
+    Storage.add(CFG.STORE.EVENING, record);
+    UI.onBPAutoSaved('evening', record);
+  },
+};
+
+
 const TiltTest = {
   async start() {
     Utils.log('Tilt: Start');
