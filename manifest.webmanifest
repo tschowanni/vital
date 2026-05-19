@@ -1,0 +1,21 @@
+{
+  "name": "VITAL · Gesundheits-Monitor",
+  "short_name": "VITAL",
+  "description": "Integriertes Self-Monitoring für POTS / ME/CFS · Tilt-Test, BD, HRV, Tagebuch",
+  "lang": "de-CH",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1e2128",
+  "theme_color": "#1e2128",
+  "categories": ["health", "medical", "utilities"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
